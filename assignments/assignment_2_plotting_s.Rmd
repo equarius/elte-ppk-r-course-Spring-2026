@@ -31,7 +31,29 @@ The 2020-09-22 TidyTueday datasets are about climbing expeditions. From the thre
 -   The bar colors use the viridis palette and light theme.
 
 ```{r}
+rd <- tidytuesdayR::tt_load('2020-09-22')
+pk <- read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2020/2020-09-22/peaks.csv"), sep = ",", dec=".", header = T)
+exp<-read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2020/2020-09-22/expeditions.csv"), sep = ",", dec=".", header = T)
+memb<-read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2020/2020-09-22/members.csv"), sep = ",", dec=".", header = T)
 
+fakt <- as.data.frame(forcats::fct_lump(f=exp$peak_name,n=15))
+
+ord<-exp %>% 
+  mutate(peak_name = forcats::fct_lump(peak_name, n=15)) %>%
+  filter(peak_name!="Other") %>% 
+  group_by(peak_name) %>% 
+  summarise(n = n()) %>% 
+  arrange(desc(n)) %>% 
+  select(peak_name)
+fct_reorder()
+
+exp %>% 
+  mutate(peak_name = forcats::fct_lump(peak_name, n=15)) %>%
+  filter(peak_name!="Other") %>% 
+  group_by(peak_name, season) %>% 
+  summarize(ordi=n(), .groups="drop") %>% 
+  mutate(peak_name = fct_reorder(peak_name,ordi,sum, .desc=FALSE)) %>%
+  ggplot(aes(y = peak_name, x = ordi, fill = season))+geom_col()+scale_fill_viridis_d()+ylab("")+xlab("Number of expeditions")+theme_light()+theme(legend.position = "bottom")+ggtitle("The 15 most popular peaks stacked by season of expedition")
 ```
 
 ## Task 2: PhDs awarded
