@@ -31,10 +31,9 @@ The 2020-09-22 TidyTueday datasets are about climbing expeditions. From the thre
 -   The bar colors use the viridis palette and light theme.
 
 ```{r}
-rd <- tidytuesdayR::tt_load('2020-09-22')
-pk <- read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2020/2020-09-22/peaks.csv"), sep = ",", dec=".", header = T)
+#rd <- tidytuesdayR::tt_load('2020-09-22') #sadly this did not work, so I ended up downloading the datafile itself
 exp<-read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2020/2020-09-22/expeditions.csv"), sep = ",", dec=".", header = T)
-memb<-read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2020/2020-09-22/members.csv"), sep = ",", dec=".", header = T)
+
 
 fakt <- as.data.frame(forcats::fct_lump(f=exp$peak_name,n=15))
 
@@ -67,7 +66,16 @@ Notes:
 -   The line size is 1.2, the colors are from the brewer "Dark2" palette. The theme is set to minimal.
 
 ```{r}
-
+phdr<-read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2019/2019-02-19/phd_by_field.csv"), sep = ",", dec=".", header = T)
+phdr <- tidytuesdayR::tt_load('2019-02-19') #fixed it, had to create a new token and add it to .Renviron as GITHUB_PAT
+phdr <- as.data.frame(phdr[1])
+colnames(phdr) <- c("broad_field","major_field","field", "year","n_phds")
+phd1 <- phdr %>% 
+  mutate(broad_field = as.factor(broad_field), major_field = as.factor(major_field))
+phd1 %>% 
+  group_by(broad_field,year) %>% 
+  summarize(summi = sum(n_phds, na.rm=T)) %>%
+  ggplot(aes(y=summi,x=year,color = broad_field))+geom_line(linewidth=1.2) + scale_x_continuous(breaks = scales::breaks_pretty(n=length(unique(phd1$year))))+theme_minimal()+scale_color_brewer(palette="Dark2", "Broad field") + ylab("") + xlab("") + ggtitle("Number of awarded Ph.D.-s in the US by year")
 ```
 
 ## Task 3: Commute in the US
