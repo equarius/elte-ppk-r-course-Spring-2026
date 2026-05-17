@@ -66,7 +66,8 @@ Notes:
 -   The line size is 1.2, the colors are from the brewer "Dark2" palette. The theme is set to minimal.
 
 ```{r}
-phdr<-read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2019/2019-02-19/phd_by_field.csv"), sep = ",", dec=".", header = T)
+#phdr<-read.table(url("https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2019/2019-02-19/phd_by_field.csv"), sep = ",", dec=".", header = T) first I used this
+#but it had only 1685 lines, so I was forced to fix my issues with tidytuesdayR::tt_load
 phdr <- tidytuesdayR::tt_load('2019-02-19') #fixed it, had to create a new token and add it to .Renviron as GITHUB_PAT
 phdr <- as.data.frame(phdr[1])
 colnames(phdr) <- c("broad_field","major_field","field", "year","n_phds")
@@ -89,5 +90,17 @@ Notes:
 -   The point size is 2, . The theme is set to light.
 
 ```{r}
-
+commuter <- as.data.frame(tidytuesdayR::tt_load('2019-11-05')[1])
+str(commuter)
+summary(commuter)
+commuted <- commuter %>% 
+  mutate(commute.city = as.factor(commute.city), commute.state=as.factor(commute.state), commute.city_size = as.factor(commute.city_size), commute.mode = as.factor(commute.mode))
+commuted %>% 
+  group_by(commute.state, commute.state_region, commute.state_abb) %>% 
+  pivot_wider(names_from = commute.mode, values_from = commute.n) %>% 
+  summarize(sumbike = sum(Bike, na.rm = T), sumwalk = sum(Walk, na.rm=T)) %>% 
+  ggplot(aes(x=sumwalk, y=sumbike, color=commute.state_region, label=commute.state_abb))+geom_point(size=2) + scale_y_log10(labels = scales::comma_format()) + scale_x_log10(labels = scales::comma_format()) + geom_text(color = "black") + theme_light() + xlab("Number of ppl walking to work (log N)") + xlab("Number of ppl biking to work (log N)")
+  
+asd <- split(x=commuted,f=commuted$commute.mode, drop = F)
+asd2<-merge(as.data.frame(asd[1]), as.data.frame(asd[2]),by=2)
 ```
