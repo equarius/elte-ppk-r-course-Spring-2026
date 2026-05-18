@@ -62,15 +62,21 @@ library(readxl)
 library(dplyr)
 library(tidyverse)
 library(car)
+library(lmtest)
+library(lm.beta)
 ```
 
 ```{r load&basic exploration, include=FALSE}
-filepath <- file.choose()
+filepath <- "/home/equarius/Documents/uni/semester_2/stat_programming/elte-ppk-r-course-Spring-2026/data/assignment_3_dataset.xlsx"
 rd<-read_excel(filepath,sheet=1)
 unique(rd$sex)
+#crd <- rd %>% 
+#  as.data.frame() %>% 
+#  mutate(sex = as.factor(sex)) %>% 
+#  mutate(sex = recode(sex, "woman" = "female")) #sex was corrected here, but car broke this
+rd[rd$sex=="woman","sex"] <- "female"
 crd <- rd %>% 
-  mutate(sex = as.factor(sex)) %>% 
-  mutate(sex = recode(sex, "woman" = "female")) #sex was corrected here
+  mutate(sex = as.factor(sex))
 str(crd)
 summary(crd)
 crdl <- crd %>% 
@@ -137,7 +143,6 @@ In order to test the more complex model for outliers and to test the assumptions
 
 ```{r __more complex model__, include=FALSE}
 mc <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_saliva+cortisol_serum, data = crd)
-ms <- lm(pain ~ age + sex, data = crd)
 ```
 
 #### Checking for influential outliers
@@ -184,7 +189,9 @@ plot(mc, which = 1)
 Check the homoscedasticty assumption (homogeneity of variance).
 
 ```{r}
-
+plot(mc, which = 3)
+bptest(mc)
+#trendline and Breusch-Pagan test suggest homoscedasticity
 ```
 
 Check the multicollinearity assumption.
@@ -227,7 +234,7 @@ coodi %>%
   rownames_to_column(var="ID") %>% 
   mutate(ID = as.numeric(ID)) %>% 
   ggplot(aes(x=ID,y=coodi))+geom_bar(stat="identity")+geom_hline(yintercept=4/nrow(crd))+theme(axis.text.x = element_text(angle=90))+scale_x_continuous(breaks=seq(1,159,1))
-#Outliers are still present
+#Outliers are still present, but kept for natural variability
 ```
 
 #### Checking assumptions of the updated model
@@ -244,13 +251,16 @@ residuals(mcc) %>%
 Linearity assumption
 
 ```{r}
-
+plot(mcc, which = 1)
+#No visible change
 ```
 
 Homoscedasticty assumption (homogeneity of variance)
 
 ```{r}
-
+plot(mcc, which = 3)
+bptest(mcc)
+#Slightly larger edge-effect at the right tip, but the assumption still holds
 ```
 
 Multicollinearity assumption
@@ -265,18 +275,69 @@ vif(mcc)
 Create the simple model and get the results of the model that needs to be reported based on the What to report section.
 
 ```{r}
-
+ms <- lm(pain ~ age + sex, data = crd)
 ```
 
 Create the more complex model based on the results of the model diagnostics. Also, get the results that needs to be reported based on the What to report section.
 
-```{r}
+*Report the results of the simpler model and the more complex model. For both models you should report the* **model test statistics (adj.R2, F, df, and p value)***. Also, report the statistics describing the* **coefficients of the predictors in a table format (unstandardized regression coefficients and 95% confidence intervals, standardized regression coefficients (B and Beta values), and p values).**
 
+```{r}
+mcc <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_saliva, data = crd)
+summary(mcc) #Complex model
+#Residual standard error = 1.238
+#adj.R2 = 0.34
+#F(6,152)=14.53
+#p<0.001
+summary(ms) #Simple model
+#Residual standard error = 1.464
+#adj.R2 = 0.07
+#F(6,156)=7.511
+#p<0.001
+msreport <- cbind(summary(lm.beta(ms))$"coefficients",confint(ms)) %>% 
+  as.data.frame() %>% 
+  rownames_to_column("predictor") %>% 
+  select(!4&!5)
+colnames(msreport) <- c("predictor", "B", "Beta","p","confind_lower","confint_upper")
+mccreport <- cbind(summary(lm.beta(mcc))$"coefficients",confint(mcc)) %>% 
+  as.data.frame() %>% 
+  rownames_to_column("predictor") %>% 
+  select(!4&!5)
+colnames(mccreport) <- c("predictor", "B", "Beta","p","confind_lower","confint_upper")
 ```
+
+|model|Residual_standard_error|adj.R2|F|df|p
+| -------- | -------- | -------- | -------- | -------- | -------- |
+|simple|1.46|0.07|7.51|6,156|<0.001|
+|complex|1.24|0.34|14.53|6,152|<0.001|
+
+Our model equation will look like:
+
+Ypain = 1.47(intercept) - 0.23(age) + 0.31(male sex) - 0.03(STAI) + 0.09(pain catastrophization) - 0.14(mindfulness) + 0.58(saliva cortisol)
+
+*Compare the two models in terms of how much variance they explain of pain’s variability in the sample.***Report Akaike information criterion (AIC) for both models and the F test statistic and p value of the likelihood ratio test** *comparing the two models.*
 
 Compare the two models.
 
-```{r}
-
+```{r echo=FALSE}
+anova(ms, mcc)
+#F(4,152)=16.536, p<0.001
+AIC(ms) #577.50
+AIC(mcc) #528.05
+lrtest(ms,mcc) #p<0.001
+summary(lm.beta(ms))
+summary(lm.beta(mcc))
 ```
 
+### Comparing the two models
+
+The simple baseline model containing only age and sex as predictors explained a significant, but small portion of variability R2=0.09, adjusted R2=0.07, F(2,156)=7.51, p<0.001, AIC = 577.50.
+The more complex model containing trait anxiety, pain catastrophization, mindfulness and saliva cortisol explained a significant, but larger portion of variability R2=0.36, adjusted R2=0.34, F(6,152)=14.53, p<0.001, AIC = 528.05.
+R2 values indicate more variance explained with the full model and the lower AIC value also point to a better model fit. Hierarchical F-test indicate that the complex model improved the model explanation (F(4,152)=16.536, p<0.001) and the significance of the likelihood ratio test also point into this direction (p<0.001).
+
+# Discussion
+
+Examining the predictor performances, in the simple model age was the only significant predictor (p<0.001), where every year would mean a 0.09 points of decrease in the pain. This would assume that - in line with previous findings - pain has a protective effect.
+If we examine the complex model, the pain catastrophization and the cortisol saliva remained only significant (both p<0.001). This would assume that behind the protective effects of age in reality we see psychological traits. With every increase in pain catastrophization the pain would increase 0.09 points; and with every increase in cortisol saliva the pain would increase with 0.58 points, pointing to the fact that cortisol saliva taken 5 minutes before the operation was the best predictor of the experienced level of pain after the operation.
+
+The addition of psychological and physiological variables improved our understanding about the nature of postoperative pain. It also helped in untangling the association with age.
