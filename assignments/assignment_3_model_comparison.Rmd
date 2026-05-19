@@ -67,14 +67,11 @@ library(lm.beta)
 ```
 
 ```{r load&basic exploration, include=FALSE}
-filepath <- "/home/equarius/Documents/uni/semester_2/stat_programming/elte-ppk-r-course-Spring-2026/data/assignment_3_dataset.xlsx"
-rd<-read_excel(filepath,sheet=1)
+filepath <- file.path(gsub("assignments","data",dirname(rstudioapi::getSourceEditorContext()$path)),
+                 "assignment_3_dataset.xlsx")
+rd<-read_excel(filepath,sheet=1) # load in data
 unique(rd$sex)
-#crd <- rd %>% 
-#  as.data.frame() %>% 
-#  mutate(sex = as.factor(sex)) %>% 
-#  mutate(sex = recode(sex, "woman" = "female")) #sex was corrected here, but car broke this
-rd[rd$sex=="woman","sex"] <- "female"
+rd[rd$sex=="woman","sex"] <- "female" #correct the wrong entries
 crd <- rd %>% 
   mutate(sex = as.factor(sex))
 str(crd)
@@ -88,7 +85,7 @@ for(tempid in unique(crdl$ID)){
   tempsex <- as.numeric(crd[crd$ID==tempid,"sex"])
   crdl[crdl$ID==tempid,"sex"] <- tempsex
 }
-crdl$sex <- factor(as.character(crdl$sex), levels = c("1","2"), labels = c("1" = "female","2" = "male")) #delete this before submission
+crdl$sex <- factor(as.character(crdl$sex), levels = c("1","2"), labels = c("1" = "female","2" = "male"))
 ```
 
 ## Data and model diagnostics 
@@ -150,7 +147,7 @@ mc <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_saliv
 Check for outlier values in the model.
 
 ```{r}
-coodi <- cooks.distance(mc)
+coodi <- cooks.distance(mc) #calculate cook's distance for influential outliers
 coodi %>% 
   as.data.frame() %>% 
   rownames_to_column(var="ID") %>% 
@@ -165,7 +162,7 @@ excl <- coodi %>%
   select(ID)
 excl <- as.numeric(unname(unlist(excl)))
 crdwo <- crd[-excl,]
-#re-creating model for later analysis
+#re-creating model for later analysis, consider running this also
 mcwo <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_saliva, data = crdwo)
 ```
 
@@ -221,6 +218,7 @@ If based on the assumption tests you decide to drop a predictor variable you sho
 ```{r}
 #I decided to drop the serum cortisol measure, to avoid violating the linearity assumption.
 #I chose this, because multiple clinical results already suggest its connection to experienced pain levels, thus it would be optimal
+#Other rationale would be to stick to the serum level, since it has been suggested by studies before as a strong associate of postoperative pain.
 #to explore the saliva level's associations further.
 mcc <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_saliva, data = crd)
 ```
@@ -313,7 +311,7 @@ colnames(mccreport) <- c("predictor", "B", "Beta","p","confind_lower","confint_u
 
 Our model equation will look like:
 
-Ypain = 1.47(intercept) - 0.23(age) + 0.31(male sex) - 0.03(STAI) + 0.09(pain catastrophization) - 0.14(mindfulness) + 0.58(saliva cortisol)
+Y~pain~ = 1.47(intercept) - 0.23(age) + 0.31(male sex) - 0.03(STAI) + 0.09(pain catastrophization) - 0.14(mindfulness) + 0.58(saliva cortisol)
 
 *Compare the two models in terms of how much variance they explain of pain’s variability in the sample.***Report Akaike information criterion (AIC) for both models and the F test statistic and p value of the likelihood ratio test** *comparing the two models.*
 

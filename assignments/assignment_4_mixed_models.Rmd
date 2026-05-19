@@ -13,6 +13,7 @@ library(haven)
 library(ggplot2)
 library(lme4)
 library(performance)
+library(broom.mixed)
 ```
 
 # Introduction
@@ -61,7 +62,7 @@ Compare the model coefficients and the confidence intervals observed in this ass
 
 Read the datasets used in this assignment. Pay attention to the extensions of the datafiles.
 
-```{r}
+```{r load in the data, include=FALSE}
 ra <- read_sav(file.path(gsub("assignments","data",dirname(rstudioapi::getSourceEditorContext()$path)),
                  "assignment_4_dataset_A.sav"))
 rb <- read_sav(file.path(gsub("assignments","data",dirname(rstudioapi::getSourceEditorContext()$path)),
@@ -72,7 +73,7 @@ rb <- read_sav(file.path(gsub("assignments","data",dirname(rstudioapi::getSource
 
 Run an exploratory data analysis (EDA) to investigate the dataset.
 
-```{r}
+```{r EDA, include=FALSE}
 str(ra)
 summary(ra) #household_income has neg values but we won't use it anyway
 head(ra)
@@ -132,13 +133,15 @@ ca <- ra %>%
   mutate(sex = factor(ra$sex, levels = c("male","female","Male"), labels = c("male","female","Male" = "male")))
 ```
 
+Coding error was found in the labels of the "sex" column and thus recoded.
+
 ## Model build
 First, fit a linear mixed model to estimate postoperative pain on datafile A. You should use the same fixed effect predictors as you used in your final model in the 3 assignment. (If you did not do that assignment, use the following predictors: age, sex, STAI, pain catastrophizing, mindfulness, and serum cortisol.) Importantly, the model has to account for the clustering of the data in different hospital sites. We have no reason to assume that the effects of the different predictors would be different in the different hospitals, so fit a random intercept model including the random intercept of hospital-ID.
 
 ```{r}
-ma <- lmer(pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_serum + (1 | hospital), data = ca, REML = T)
+ma <- lmer(pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_serum + (1 | hospital), data = ca, REML = T) #fit the model
 summary(ma)
-summary(ms)
+summary(mcc) #model from last assignment
 ```
 
 ## Extract confint
@@ -146,71 +149,116 @@ summary(ms)
 Once the model is built, note the model coefficients and the confidence intervals of the coefficients for all fixed effect predictors, and compare them to the ones obtained in the 3 assignment.
 
 ```{r}
-cis <- confint(ma)
-cis2 <- confint(mc)
-cbind(as.data.frame(cis)[-c(1:2),],as.data.frame(cis2))
+cis <- confint(ma) #confidence intervals for current model
+cis2 <- confint(mcc) #confidence intervals for last assignment
+ciscomb <- cbind(as.data.frame(cis)[-c(1:2),],as.data.frame(cis2)) #combine the two to see the difference side-by-side
 ```
 
-Cortisol, mindfulness and age seem to be significant, as they don't include 0 in the mixed effects model. With the linear model only serum cortisol seems to be significant.
+Cortisol, mindfulness and age seem to be significant, as their CI doesn't include 0 in the mixed effects model. With the linear model only serum cortisol seems to be significant.
 
 Also, compute the variance explained by the fixed effect predictors using marginal R^2^, and the variance explained by the fixed and random effect terms combined using conditional R^2^.
 
 ```{r}
-mar2 <- r2_nakagawa(ma)
+mar2 <- r2_nakagawa(ma) #get conditional and marginal R^2
 print(mar2)
 ```
+
+Fixed effect variance was 0.32, the combined R^2 was 0.43.
 
 Now use the model coefficients obtained on data file A to predict pain in datafile B.
 
 ```{r}
-cbind(data.frame(pred=predict(ma, rb, allow.new.levels=T)),data.frame(value=rb$pain)) %>% 
+predbl <- cbind(data.frame(pred=round(predict(ma, rb, allow.new.levels=T))),data.frame(value=rb$pain)) %>% #predicted model in long format with observed values
   mutate(diff = (pred-value)) %>% 
   rownames_to_column() %>% 
-  pivot_longer(!rowname,names_to = "names",values_to = "values") %>% 
-  filter(names!="pred") %>% 
-  ggplot(aes(x=value,y=values))+geom_point()
-
+  arrange(order(pred)) %>% 
+  pivot_longer(!rowname,names_to = "names",values_to = "values")
+predbw <- cbind(data.frame(pred=predict(ma, rb, allow.new.levels=T)),data.frame(value=rb$pain)) %>% #wide format predicted model with observed values
+  mutate(diff = (pred-value)) %>% 
+  rownames_to_column()
+predbl %>% 
+  filter(names!="diff") %>% 
+  group_by(names) %>% 
+  ggplot(aes(x=rowname,y=values,color=names))+geom_point()
+predblp <- predbl %>% 
+  filter(names!="diff") %>% 
+  group_by(names)
+predblp %>% 
+  ggplot(aes(x = values, fill = names))+geom_histogram(position="dodge") #model underestimates pain for higher values
+predbw %>% 
+  ggplot(aes(x=value,y=pred))+geom_point()
+ra2 <- ra %>% 
+  mutate(dat = "A")
+rb2 <- rb %>% 
+  mutate(dat = "B")
+rab2 <- rbind(ra2,rb2)
+ggplot(rab2,aes(x=pain, fill=dat))+geom_histogram(position="dodge") #file B had more values in the higher part of the spectrum, which explains the poorer prediction
+rab2 %>% 
+  group_by(dat) %>% 
+  summary(group)
+# Difference between model prediction and actual values arises from the difference in distribution between A and B, with B having more observations of higher levels of postoperative pain.
 ```
 
 Now compute the variance explained by the model on datafile B. You can do this by using the formula: __1 - (RSS / TSS) = R^2__. Compare this R^2^ to the marginal and conditional R^2^ values computed for the model on datafile A. 
 
 ```{r}
-
-cbind(data.frame(pred=predict(ma, rb, allow.new.levels=T)),data.frame(value=rb$pain)) %>% 
-  mutate(diff = (pred-value)) %>% 
-  ggplot(aes(x=value,y=diff))+geom_point()+geom_smooth(method=lm)
 cbind(data.frame(pred=predict(ma, rb, allow.new.levels=T)),data.frame(value=rb$pain)) %>% 
   mutate(diff = (pred-value)) %>% 
   summary()
-summary()
-pred <- data.frame(pred=predict(ma, rb, allow.new.levels=T))
-pain <- data.frame(value=rb$pain)
+pred <- data.frame(pred=predict(ma, rb, allow.new.levels=T)) #predicted data file B
+pain <- data.frame(value=rb$pain) #observed pain from data file B
 RSS <- sum((pain - pred)^2)
 TSS <- sum((pain - mean(unlist(pain)))^2)
 varexp <- 1 - (RSS/TSS) %>% 
-  round(digits=3)
+  round(digits=3) #calculate the variance explained with data file B
 print(mar2)
 print(varexp)
 ```
 
-Report the model coefficients and the confidence intervals of the coefficients for each fixed effect predictor obtained on data file A in a table. 
-
-Report the variance components for the fixed effects, the random intercept, and the residuals (from the model on data file A). Also report the marginal R^2^ and the conditional R^2^ squared obtained from the model on data file A, and the observed R^2^ of this model for data file B.
+The variance explained was 0.35, which is  lower that the whole model R^2 (0.43), and is closer to the variance explained by just the fixed effects predictors (R^2 = 0.32)
 
 # Report
+
+[X]*Report the model coefficients and the confidence intervals of the coefficients for each fixed effect predictor obtained on data file A in a table. *
+
+[X]*Report the variance components for the fixed effects, the random intercept, and the residuals (from the model on data file A). Also report the marginal R^2^ and the conditional R^2^ squared obtained from the model on data file A, and the observed R^2^ of this model for data file B.*
 
 ```{r}
 summa<-summary(ma)
 mar2
 cis
 repma <- cbind(summa$coefficients, as.data.frame(cis)[-c(1:2),])
+repma2 <- tidy(ma, conf.int=T)
+fvar <- var(predict(ma, re.form = NA))
 ```
 
-|metric|Component|Var|explained R2|
+## Model coefficients and CIs
+
+**Table 1.**
+*Model coefficients and confidence intervals for data file A*
+
+| Estimate | Std. Error | t-value | 2.5 % | 97.5 % |
 | ----------- | ----------- | ----------- | ----------- | ----------- |
+(Intercept)|3.80|1.42|2.68|1.06|6.58|
+age|-0.05|0.02|-2.74|-0.09|-0.02|
+sexfemale|-0.30|0.19|-1.56|-0.67|0.07|
+STAI_trait|0.00|0.02|0.06|-0.04|0.05|
+pain_cat|0.04|0.03|1.29|-0.02|0.09|
+mindfulness|-0.26|0.10|-2.61|-0.46|-0.07|
+cortisol_serum|0.61|0.11|5.34|0.39|0.83|
 
-The variance between the hospital sites was 0.31 and the unexplained variance was 1.48.
+---
 
-The distribution'n marginal R^2 of 0.32 shows that the fixed variables explained 32% of the variance from the data, while the complete model explained 43% of the variance (R^2=0.43).
+## Variance components
+
+Fixed effects variance was 0.83, while random effects was 0.31 and the residual variance was 1.48.
+
+The distribution's marginal R^2 of 0.32 shows that the fixed variables explained 32% of the variance from the data, while the complete model explained 43% of the variance (R^2=0.43).
 
 # Discussion
+
+*Compare the model coefficients and the confidence intervals observed in this assignment and the assignment for Lab 2 and discuss what you think the differences or similarities mean.*
+
+The model using only the fixed effects showed a similar performance (from adj. R^2=0.34 at assign. 3 to marginal R^2 of 0.32), while with the addition of the effect of the hospitals the patients visited, we managed to increase the total explained variance (conditional R^2 0.43). This indicated that the hospitals the patients visited had a role in the experienced level of postoperative pain.
+
+In the model of the other assignment we saw a significant effect of pain catastrophization and saliva cortisol level. Based on the confidence intervals and the t-values, after accounting for the effect of hospitals only the preoperative cortisol level remained a significant predictor of the postoperative pain experienced by the patients.
