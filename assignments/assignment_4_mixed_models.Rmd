@@ -9,6 +9,10 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(haven)
+library(ggplot2)
+library(lme4)
+library(performance)
 ```
 
 # Introduction
@@ -58,7 +62,10 @@ Compare the model coefficients and the confidence intervals observed in this ass
 Read the datasets used in this assignment. Pay attention to the extensions of the datafiles.
 
 ```{r}
-
+ra <- read_sav(file.path(gsub("assignments","data",dirname(rstudioapi::getSourceEditorContext()$path)),
+                 "assignment_4_dataset_A.sav"))
+rb <- read_sav(file.path(gsub("assignments","data",dirname(rstudioapi::getSourceEditorContext()$path)),
+                 "assignment_4_dataset_B.sav"))
 ```
 
 ## Exploratory data analysis
@@ -66,7 +73,54 @@ Read the datasets used in this assignment. Pay attention to the extensions of th
 Run an exploratory data analysis (EDA) to investigate the dataset.
 
 ```{r}
+str(ra)
+summary(ra) #household_income has neg values but we won't use it anyway
+head(ra)
+unique(ra$sex) #recode Male to male
+unique(ra$hospital)
+str(rb)
+summary(rb)
+head(rb)
+unique(rb$sex)
+unique(rb$hospital)
 
+ra %>% 
+  select(!sex&!hospital) %>% 
+  pivot_longer(!ID, names_to="names",values_to="values") %>% 
+  ggplot(aes(y=values))+geom_boxplot()+facet_wrap(~names, scales="free")
+
+ra %>% 
+  select(!sex&!hospital) %>% 
+  pivot_longer(!ID, names_to="names",values_to="values") %>% 
+  group_by(names) %>% 
+  select(values) %>% 
+  boxplot.stats()
+outliers <- as.numeric()
+for(tempcol in colnames(ra)[-c(1,3,13)]){
+  tempdat <- unname(unlist(ra[,tempcol]))
+  tempout <- which(tempdat %in% boxplot.stats(tempdat)$out)
+  cat("column is",tempcol, "and the outliers are",tempout,"\n",sep=" ")
+  outliers <- c(outliers, tempout)
+  outliers <- outliers[order(outliers)]
+}
+#outliers found in the rows of "outliers" variable. Consider testing a model after removing them
+ra %>% 
+  select(!sex&!hospital) %>% 
+  pivot_longer(!ID, names_to="names",values_to="value") %>% 
+  group_by(names) %>% 
+  summarize(mean = mean(value),
+            sd = sd(value),
+            min = min(value),
+            max = max(value),
+            median = median(value),
+            shapiro = round(as.double(shapiro.test(value)[2]),2)) %>% 
+  arrange(desc(mean))
+cor(ra[,-c(1,3,13)], method="spearman") %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "ID") %>% 
+  pivot_longer(!ID, names_to="measure",values_to="value") %>% 
+  filter(value >=0.8) %>% 
+  group_by(measure) #only the 2 cortisol measures show larger correlation here as well
 ```
 
 ## Correct coding errors
@@ -74,6 +128,89 @@ Run an exploratory data analysis (EDA) to investigate the dataset.
 If you find values in the dataset during the EDA, that are not correct based on the provided descriptions of the variables of the dataset please correct them here.
 
 ```{r}
+ca <- ra %>% 
+  mutate(sex = factor(ra$sex, levels = c("male","female","Male"), labels = c("male","female","Male" = "male")))
+```
+
+## Model build
+First, fit a linear mixed model to estimate postoperative pain on datafile A. You should use the same fixed effect predictors as you used in your final model in the 3 assignment. (If you did not do that assignment, use the following predictors: age, sex, STAI, pain catastrophizing, mindfulness, and serum cortisol.) Importantly, the model has to account for the clustering of the data in different hospital sites. We have no reason to assume that the effects of the different predictors would be different in the different hospitals, so fit a random intercept model including the random intercept of hospital-ID.
+
+```{r}
+ma <- lmer(pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_serum + (1 | hospital), data = ca, REML = T)
+summary(ma)
+summary(ms)
+```
+
+## Extract confint
+
+Once the model is built, note the model coefficients and the confidence intervals of the coefficients for all fixed effect predictors, and compare them to the ones obtained in the 3 assignment.
+
+```{r}
+cis <- confint(ma)
+cis2 <- confint(mc)
+cbind(as.data.frame(cis)[-c(1:2),],as.data.frame(cis2))
+```
+
+Cortisol, mindfulness and age seem to be significant, as they don't include 0 in the mixed effects model. With the linear model only serum cortisol seems to be significant.
+
+Also, compute the variance explained by the fixed effect predictors using marginal R^2^, and the variance explained by the fixed and random effect terms combined using conditional R^2^.
+
+```{r}
+mar2 <- r2_nakagawa(ma)
+print(mar2)
+```
+
+Now use the model coefficients obtained on data file A to predict pain in datafile B.
+
+```{r}
+cbind(data.frame(pred=predict(ma, rb, allow.new.levels=T)),data.frame(value=rb$pain)) %>% 
+  mutate(diff = (pred-value)) %>% 
+  rownames_to_column() %>% 
+  pivot_longer(!rowname,names_to = "names",values_to = "values") %>% 
+  filter(names!="pred") %>% 
+  ggplot(aes(x=value,y=values))+geom_point()
 
 ```
 
+Now compute the variance explained by the model on datafile B. You can do this by using the formula: __1 - (RSS / TSS) = R^2__. Compare this R^2^ to the marginal and conditional R^2^ values computed for the model on datafile A. 
+
+```{r}
+
+cbind(data.frame(pred=predict(ma, rb, allow.new.levels=T)),data.frame(value=rb$pain)) %>% 
+  mutate(diff = (pred-value)) %>% 
+  ggplot(aes(x=value,y=diff))+geom_point()+geom_smooth(method=lm)
+cbind(data.frame(pred=predict(ma, rb, allow.new.levels=T)),data.frame(value=rb$pain)) %>% 
+  mutate(diff = (pred-value)) %>% 
+  summary()
+summary()
+pred <- data.frame(pred=predict(ma, rb, allow.new.levels=T))
+pain <- data.frame(value=rb$pain)
+RSS <- sum((pain - pred)^2)
+TSS <- sum((pain - mean(unlist(pain)))^2)
+varexp <- 1 - (RSS/TSS) %>% 
+  round(digits=3)
+print(mar2)
+print(varexp)
+```
+
+Report the model coefficients and the confidence intervals of the coefficients for each fixed effect predictor obtained on data file A in a table. 
+
+Report the variance components for the fixed effects, the random intercept, and the residuals (from the model on data file A). Also report the marginal R^2^ and the conditional R^2^ squared obtained from the model on data file A, and the observed R^2^ of this model for data file B.
+
+# Report
+
+```{r}
+summa<-summary(ma)
+mar2
+cis
+repma <- cbind(summa$coefficients, as.data.frame(cis)[-c(1:2),])
+```
+
+|metric|Component|Var|explained R2|
+| ----------- | ----------- | ----------- | ----------- | ----------- |
+
+The variance between the hospital sites was 0.31 and the unexplained variance was 1.48.
+
+The distribution'n marginal R^2 of 0.32 shows that the fixed variables explained 32% of the variance from the data, while the complete model explained 43% of the variance (R^2=0.43).
+
+# Discussion
