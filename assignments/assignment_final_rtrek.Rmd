@@ -62,11 +62,18 @@ rdat2 %>%
   mutate(number_of_aerial_victory_credits = (number_of_aerial_victory_credits + rnorm(nrow(rdat2), 0, 0.1))) %>% 
   ggplot(aes(y=number_of_aerial_victory_credits,x=rnorm(nrow(rdat2),1,0.2)))+geom_point()+geom_hline(yintercept=0.5) #itt látszik jól, hogy a többségnek egyáltalán nem volt légi győzelme.
 
+rdat2 %>% #nem volt nagyon lost
+  group_by(reported_lost, reported_lost_date) %>% 
+  summarize(n=n())
+
+rdat2 %>% #2nd Lt volt a legtöbb, akinek volt légi győzelme
+  group_by(pilot_type, hasvictory, rank_at_graduation) %>% 
+  summarize(n=n())
 
 
 ```
 
-### Codebook
+### Codebook --> ezt majd valahol az elején kellene bemutatni szerintem.
 
 - name - full name [X]
 - last_name **no need to modify** [X]
@@ -97,20 +104,79 @@ rdat2 %>%
 
 ## Data modification
 
-```{r}
+```{r Correct variables}
 rdat2 <- rdat2 %>% 
-  mutate(hasvictory = number_of_aerial_victory_credits!=0)
-
-rdat2 %>% 
-  group_by(hasvictory, pilot_type) %>% 
-  summarize(n = n())
-
-rdat2 %>% 
-  mutate(graduation_date = format(graduation_date, format = "%Y")) %>% 
-  group_by(hasvictory) %>% 
-  summarize(n = n())
+  mutate(rank_at_graduation = recode(rank_at_graduation, "Captain" = "Capt", "Unk" = "N/A"), pilot_type = recode(pilot_type, "Liason pilot" = "Liaison pilot"))
+rdat2 <- rdat2 %>% 
+  mutate(hasvictory = number_of_aerial_victory_credits!=0, gradyear = as.numeric(format(graduation_date, format = "%Y"))) 
+rdat2<-rdat2 %>% 
+  filter(gradyear<=1944) #mindenkit kidobni, aki később végzett, mert túl későn érkeztek a háborúba
+rdat2[495,"aerial_victory_credits"] <- "Downed 1 Me-109 on June 9, 1944; Downed 1 He-111 on October 12, 1944; Downed 1 Me-109 on October 12, 1944"
+rdat2[240,"aerial_victory_credits"] <- "Downed 1 Fw-190 on July 2, 1943; Downed 1 Fw-190 on January 28, 1944; Downed 1 Me-109 on January 28, 1944"
 ```
 
+
+```{r Create new variables}
+
+#####Create long format with the victories --> ezt majd szerintem szét kellene szedni külön 2 chunkba
+row.names(rdat2) <- 1:nrow(rdat2)
+rlong <- as.data.frame(matrix(nrow=0,ncol=18))
+#colnames(rlong) <- c("id","num","type","date")
+cn <- c(c("id","num","type","date"),colnames(rdat2[,c(4:10,12:18)]))
+colnames(rlong) <- cn
+for(temprow in (1:nrow(rdat2))){
+  temps <- rdat2[temprow,c(4:10,12:18)]
+  tempid <- temprow
+  tempvic <- rdat2[temprow,"aerial_victory_credits"]
+  tempnum <- NA
+  temptype <- NA
+  tempdate <- NA
+  if(!is.na(tempvic)){
+    tempvic2 <- strsplit(tempvic, split="; ")
+    for(vic in unlist(tempvic2)){
+      vic2<-unlist(strsplit(unlist(vic),split=" "))
+      if(length(vic2)==8){
+        tempnum1 <- eval(parse(text=vic2[2]))
+        tempnum2 <- eval(parse(text=vic2[3]))
+        tempnum <- tempnum1 + tempnum2
+        vic2 <- vic2[-3]
+      }else{
+        tempnum <- eval(parse(text=vic2[2]))
+      }
+      temptype <- vic2[3]
+      tempdate <- as.Date(gsub(",","",paste(vic2[7], vic2[5], vic2[6],sep="-")), format = "%Y-%B-%d")
+      temprow <- cbind(data.frame(tempid, tempnum, temptype, tempdate),temps)
+      colnames(temprow) <- cn
+      rlong <- rbind(rlong,temprow)
+    }
+  }else{
+    temprow <- cbind(data.frame(tempid, tempnum, temptype, tempdate),temps)
+    colnames(temprow) <- cn
+    rlong <- rbind(rlong,temprow)
+  }
+}
+rlong$date <- as.Date(rlong$date)
+```
+
+```{r long format data exploration}
+rlong %>% 
+  mutate(date = format(date, format = "%Y")) %>% 
+  filter(hasvictory==T) %>% 
+  group_by(date) %>% 
+  summarize(n=n())
+rlong %>% 
+  mutate(date = format(date, format = "%Y")) %>% 
+  filter(hasvictory==T) %>% 
+  ggplot(aes(x=as.numeric(format(gradyear, format = "%Y"))+rnorm(nrow(rlong[rlong$hasvictory==T,]), 0, 0.1),y=as.numeric(format(date, format = "%Y"))+rnorm(nrow(rlong[rlong$hasvictory==T,]), 0, 0.1)))+geom_point()+scale_x_continuous(breaks = seq(1942,1945,1))+scale_y_continuous(breaks = seq(1941,1945,1))+theme_classic()
+rdat2 %>% 
+  filter(hasvictory==T) %>% 
+    ggplot(aes(x=as.numeric(format(gradyear, format = "%Y"))+rnorm(nrow(rdat2[rdat2$hasvictory==T,]), 0, 0.1),y=number_of_aerial_victory_credits+rnorm(nrow(rdat2[rdat2$hasvictory==T,]), 0, 0.05)))+geom_point()+scale_x_continuous(breaks = seq(1942,1945,1))+theme_classic()
+rdat2 %>% 
+  filter(hasvictory==T) %>% 
+  group_by(gradyear,rank_at_graduation,state) %>% 
+  summarize(n=n()) %>% 
+  arrange(desc(n))
+```
 
 # Report
 
