@@ -24,13 +24,18 @@ Evaluation rubric can be found [here](https://docs.google.com/spreadsheets/d/1sQ
 
 # Data analysis
 
-```{r load in libraries and data, message=FALSE, warning=FALSE, include=FALSE}
+```{r load in libraries, message=FALSE, warning=FALSE, include=FALSE}
 library(tidytuesdayR)
 library(dplyr)
 library(tidyverse)
+library(ggplot2)
+```
+
+```{r load in the data, message=FALSE, warning=FALSE, include=FALSE}
 ttdat <- tidytuesdayR::tt_load(2022, week = 6)
 rdat <- as.data.frame(ttdat$airmen)
 ```
+
 
 ## Data exploration
 ```{r EDA, message=FALSE, warning=FALSE, include=FALSE}
@@ -46,16 +51,29 @@ rdat2<-rdat %>%
 str(rdat2)
 summary(rdat2)
 head(rdat2)
+levels(rdat2$class)
+rdat2 %>% 
+  filter(class=="45-BI-1") %>% 
+  select(pilot_type) %>% 
+  summary() #mit jelent ez a class? A type szerint service pilot. AI szerint nem volt ilyen designation.
+
+
+rdat2 %>% 
+  mutate(number_of_aerial_victory_credits = (number_of_aerial_victory_credits + rnorm(nrow(rdat2), 0, 0.1))) %>% 
+  ggplot(aes(y=number_of_aerial_victory_credits,x=rnorm(nrow(rdat2),1,0.2)))+geom_point()+geom_hline(yintercept=0.5) #itt látszik jól, hogy a többségnek egyáltalán nem volt légi győzelme.
+
+
+
 ```
 
 ### Codebook
 
-- name - full name
-- last_name
-- first_name
-- graduation_date - this is in POSIXct, good to use
-- rank_at_graduation - factor
-- class - factor, the id of the class. It represents different levels of pilot training.
+- name - full name [X]
+- last_name **no need to modify** [X]
+- first_name **no need to modify** [X]
+- graduation_date - this is in POSIXct, good to use **create new var: graduation year** [X]
+- rank_at_graduation - factor, recode "Captain" to capt. NA and Unk could be thought of as different levels, keep them. Convert "N/A" to actual NA values.
+- class - factor, the id of the class. It represents different levels of pilot training. pilot_type-graduation_year-graduation_month. Technically it is an aggregate of multiple different informations.
 - pilot_type - factor, sing
 - military_hometown_of_record - Factor, military hometown where the pilots were based
 - state - factor
@@ -74,6 +92,8 @@ head(rdat2)
 
 
 **Optional** splitting could also include the downed plane, could look for additional info about the specific planes.
+**Optional** graduation date -> meg lehetne nézni, hogy akik ugyanakkor végeztek, azok hasonlóan álltak győzelmi pontok terén. Ezt igazából talán tovább is lehetne bontani és megnézni, hogy akik valamilyen hónapban végeztek, azok esetleg jobban teljesítettek.
+**Optional** Az pl. egy jó hipotézis, hogy aki twin engine képzést kapott, az kevesebb győzelemmel rendelkezik, mert az a B-25 Mitchell közepes bombázót jelentette.
 
 
 
