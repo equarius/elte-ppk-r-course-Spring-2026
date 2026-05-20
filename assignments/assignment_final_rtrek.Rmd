@@ -1,0 +1,82 @@
+---
+title: "Final assignment"
+author: "Endre Csikos M2GEGE"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Prompt
+
+The final project must be an RMarkdown (or Quarto) document and must contain the following elements:
+
+- Reproducible data reading (preferably from the web)
+- Proper textual explanations, and commented code
+- Exploratory data analysis with useful visualizations
+- Testing of hypothesis by building statistical model(s)
+- Verifying that statistical tests are reliable and valid (e.g. residual diagnostics, assumption checks)
+- Make sure that all code chunks (including the first) is visible (I.e., set the echo = TRUE)
+- The repo must contain a knitted HTML. It is even better if you submit a github page.
+
+Evaluation rubric can be found [here](https://docs.google.com/spreadsheets/d/1sQ5friiHq_BQ8XzS2BXTmTPHLm-LJMezVBADOG8aoW4).
+
+# Data analysis
+
+```{r load in libraries and data, message=FALSE, warning=FALSE, include=FALSE}
+library(tidytuesdayR)
+library(dplyr)
+library(tidyverse)
+ttdat <- tidytuesdayR::tt_load(2022, week = 6)
+rdat <- as.data.frame(ttdat$airmen)
+```
+
+## Data exploration
+```{r EDA, message=FALSE, warning=FALSE, include=FALSE}
+str(rdat)
+unique(rdat$rank_at_graduation)
+rdat2<-rdat %>% 
+  mutate(rank_at_graduation = as.factor(rank_at_graduation),
+         class = as.factor(class),
+         graduated_from = as.factor(graduated_from),
+         pilot_type = as.factor(pilot_type),
+         military_hometown_of_record = as.factor(military_hometown_of_record),
+         state = as.factor(state))
+str(rdat2)
+summary(rdat2)
+head(rdat2)
+```
+
+### Codebook
+
+- name - full name
+- last_name
+- first_name
+- graduation_date - this is in POSIXct, good to use
+- rank_at_graduation - factor
+- class - factor, the id of the class. It represents different levels of pilot training.
+- pilot_type - factor, sing
+- military_hometown_of_record - Factor, military hometown where the pilots were based
+- state - factor
+- aerial_victory_credits - char, contains info about the downed plane and the date of the victory. *split up for later use!*
+- number_of_aerial_victory_credits - int, contains the number of the downed enemy plane
+- reported_lost
+- reported_lost_date
+- reported_lost_location
+- web_profile
+
+
+*Note*
+- aerial victories have to be split up according to semicolons.
+- pilot_type has to be corrected.
+
+
+
+**Optional** splitting could also include the downed plane, could look for additional info about the specific planes.
+
+
+
+# Report
+
+# Discussion
