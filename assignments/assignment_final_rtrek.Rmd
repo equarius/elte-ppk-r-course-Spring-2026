@@ -39,37 +39,39 @@ rdat <- as.data.frame(ttdat$airmen)
 
 ## Data exploration
 ```{r EDA, message=FALSE, warning=FALSE, include=FALSE}
+head(rdat)
 str(rdat)
+summary(rdat)
 unique(rdat$rank_at_graduation)
-rdat2<-rdat %>% 
+rdat2<-rdat %>% #recode factors as factors
   mutate(rank_at_graduation = as.factor(rank_at_graduation),
          class = as.factor(class),
          graduated_from = as.factor(graduated_from),
          pilot_type = as.factor(pilot_type),
          military_hometown_of_record = as.factor(military_hometown_of_record),
          state = as.factor(state))
-str(rdat2)
+#Itt megvolt az átkódolás, újra ugyanazok a lépések
 summary(rdat2)
 head(rdat2)
 levels(rdat2$class)
-rdat2 %>% 
-  filter(class=="45-BI-1") %>% 
-  select(pilot_type) %>% 
-  summary() #mit jelent ez a class? A type szerint service pilot. AI szerint nem volt ilyen designation.
-
 
 rdat2 %>% 
-  mutate(number_of_aerial_victory_credits = (number_of_aerial_victory_credits + rnorm(nrow(rdat2), 0, 0.1))) %>% 
-  ggplot(aes(y=number_of_aerial_victory_credits,x=rnorm(nrow(rdat2),1,0.2)))+geom_point()+geom_hline(yintercept=0.5) #itt látszik jól, hogy a többségnek egyáltalán nem volt légi győzelme.
+  select()
 
-rdat2 %>% #nem volt nagyon lost
+rdat2 %>% 
+  mutate(number_of_aerial_victory_credits=as.factor(round(number_of_aerial_victory_credits)),
+         hasvictory = number_of_aerial_victory_credits!=0) %>% 
+  ggplot(aes(x=hasvictory,fill=number_of_aerial_victory_credits))+geom_bar(stat="count",position="dodge")+scale_y_log10() # ide kell majd column label az értékekkel
+
+summary(rdat2$rank_at_graduation)
+
+rdat2 %>% #nem volt nagyon lost, csak 2 pilóta
   group_by(reported_lost, reported_lost_date) %>% 
   summarize(n=n())
 
-rdat2 %>% #2nd Lt volt a legtöbb, akinek volt légi győzelme
-  group_by(pilot_type, hasvictory, rank_at_graduation) %>% 
-  summarize(n=n())
-
+rdat %>% 
+  select(5:10) %>% 
+  pivot_longer()
 
 ```
 
@@ -90,6 +92,10 @@ rdat2 %>% #2nd Lt volt a legtöbb, akinek volt légi győzelme
 - reported_lost_date
 - reported_lost_location
 - web_profile
+
+```{r EDA datwiz}
+
+```
 
 
 *Note*
