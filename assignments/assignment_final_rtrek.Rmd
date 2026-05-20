@@ -95,6 +95,21 @@ rdat2 %>%
 **Optional** graduation date -> meg lehetne nézni, hogy akik ugyanakkor végeztek, azok hasonlóan álltak győzelmi pontok terén. Ezt igazából talán tovább is lehetne bontani és megnézni, hogy akik valamilyen hónapban végeztek, azok esetleg jobban teljesítettek.
 **Optional** Az pl. egy jó hipotézis, hogy aki twin engine képzést kapott, az kevesebb győzelemmel rendelkezik, mert az a B-25 Mitchell közepes bombázót jelentette.
 
+## Data modification
+
+```{r}
+rdat2 <- rdat2 %>% 
+  mutate(hasvictory = number_of_aerial_victory_credits!=0)
+
+rdat2 %>% 
+  group_by(hasvictory, pilot_type) %>% 
+  summarize(n = n())
+
+rdat2 %>% 
+  mutate(graduation_date = format(graduation_date, format = "%Y")) %>% 
+  group_by(hasvictory) %>% 
+  summarize(n = n())
+```
 
 
 # Report
