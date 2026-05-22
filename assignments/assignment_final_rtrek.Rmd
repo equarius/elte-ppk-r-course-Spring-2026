@@ -71,7 +71,75 @@ rdat2 %>% #nem volt nagyon lost, csak 2 pilóta
 
 rdat %>% 
   select(5:10) %>% 
-  pivot_longer()
+  mutate_all(as.character) %>% 
+  rownames_to_column(var="id") %>% 
+  pivot_longer(!id, names_to = "names",values_to="values") %>% 
+  ggplot(aes(x=values))+facet_wrap(~names, scales="free")+geom_bar()+theme(axis.text.x = element_text(angle=90))
+
+rdat %>% 
+  group_by(class, military_hometown_of_record) %>% 
+  summarize(n=n()) %>% 
+  arrange(desc(n))#volt-e olyan osztály, ahol volt valamilyen torzítás a származás szempontjából?
+
+rdat %>% 
+  group_by(class) %>% 
+  summarize(sum = sum(number_of_aerial_victory_credits),n=n()) %>% 
+  arrange(desc(sum))
+
+rdat %>% 
+  group_by(state) %>% 
+  summarize(sum = sum(number_of_aerial_victory_credits),n=n()) %>% 
+  arrange(desc(sum))
+
+rdat %>% 
+  group_by(military_hometown_of_record) %>% 
+  summarize(sum=sum(number_of_aerial_victory_credits),n=n()) %>% 
+  arrange(desc(sum)) %>% 
+  head(50) %>% 
+  ggplot(aes(x=military_hometown_of_record,y=n))+geom_col()+theme(axis.text.x = element_text(angle=90))
+
+rdat %>% 
+  mutate(hasvictory = number_of_aerial_victory_credits!=0) %>% 
+  group_by(hasvictory, pilot_type) %>% 
+  summarize(n=n()) #Itt jól látszik, hogy csak single engine pilótáknak volt győzelme és közülük is csak egy jelentős kisebbségnek, 10%-nak. A kérdés felmerül: a jelen levő tényezők közül volt-e olyan, ami ehhez hozzájárult?
+
+rdatlong <- rdat %>% 
+  select(5:10) %>% 
+  mutate_all(as.character) %>% 
+  rownames_to_column(var="id") %>% 
+  pivot_longer(!id, names_to = "names",values_to="values")
+
+rdatlong$numvic <- NA
+for(tempid in unique(rdatlong$id)){
+  tempnum <- rdat[tempid,"number_of_aerial_victory_credits"]
+  rdatlong[rdatlong$id==tempid,"numvic"] <- tempnum
+}
+
+rdatlong %>% 
+  group_by(names,values) %>% 
+  summarize(summi = sum(numvic)) %>% 
+  arrange(desc(summi)) %>% 
+  head(20) %>% 
+  group_by(names) %>% 
+  summarize(n=n()) %>% 
+  arrange(desc(n))
+
+rdat %>% 
+  group_by(class) %>% 
+  summarize(summi = sum(number_of_aerial_victory_credits),n=n()) %>% 
+  mutate(meanvic = summi/n) %>% 
+  arrange(desc(meanvic)) %>% 
+  filter(summi!=0) %>% 
+  ggplot(aes(y=meanvic, x=(summi+rnorm(26,0,0.3)), label=class))+geom_point()+geom_text(alpha=0.4,position="identity", inherit.aes = T)+scale_x_continuous(breaks=seq(1,20,1))
+
+what<-rdat %>% 
+  group_by(class) %>% 
+  summarize(summi = sum(number_of_aerial_victory_credits),n=n()) %>% 
+  mutate(meanvic = summi/n) %>% 
+  arrange(desc(meanvic)) %>% 
+  filter(summi!=0) %>% 
+  nrow()
+
 
 ```
 
