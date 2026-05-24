@@ -149,6 +149,23 @@ what<-rdat %>%
   arrange(desc(meanvic)) %>% 
   filter(summi!=0) %>% 
   nrow()
+
+wizzdat <- rdat %>% 
+  mutate(gradyear = as.factor(format(graduation_date, format = "%Y"))) %>% 
+  group_by(class, gradyear) %>% 
+  summarize(summi = sum(number_of_aerial_victory_credits),n=n(), sd = sd(number_of_aerial_victory_credits), min = min(number_of_aerial_victory_credits), max = max(number_of_aerial_victory_credits)) %>% 
+  mutate(meanvic = summi/n, groupsize = cut(n, breaks = c(0,10,20,30,40,50,60), labels = c("0-10","11-20","21-30","31-40","41-50","51-60"))) %>% 
+  arrange(desc(meanvic)) %>% 
+  filter(summi!=0)
+
+wizzdat %>% 
+  ggplot(aes(y=summi, x=(n+rnorm(26,0,0.05)), label=class, shape = groupsize, color = gradyear))+geom_point(size=3)+scale_x_continuous(breaks=seq(0,50,1))+scale_y_continuous(breaks=seq(0,50,1))+geom_smooth(method=lm, inherit.aes = F, aes(x=n, y =summi),se=F,color="black",linetype=2)+geom_smooth(method=lm, inherit.aes = F, aes(x=n, y =summi,color=gradyear),se=F)
+
+rdat %>% 
+  mutate(gradyear = as.factor(format(graduation_date, format = "%Y")), winnum=(number_of_aerial_victory_credits+rnorm(length(number_of_aerial_victory_credits),0,0.05))) %>% 
+  group_by(class, gradyear) %>% 
+  ggplot(aes(x=class,y=winnum))+geom_point()+theme(axis.text.x = element_text(angle=90)) #szerintem itt úgy kellene módosítani, hogy a labeleket a csoportszám alapján kellene sorba rendezni.
+
 #Konklúzió: nincs strength in numbers, mert ahogy nő átlagosan a csoportméret, úgy csökken az arány. Van egy gyengébb kapcsolat az évekkel, viszont ez valószínűleg inkább ahhoz kapcsolódik, hogy kisebbek voltak a csoportok átlagosan. Ezt egy summaryvel is jó lenne megmutatni.
 #+Amit szerintem még érdemes lenne megnézni:
 #+Csoportméret~győzelemszámsum
