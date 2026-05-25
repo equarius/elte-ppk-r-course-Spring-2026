@@ -29,6 +29,9 @@ library(tidytuesdayR)
 library(dplyr)
 library(tidyverse)
 library(ggplot2)
+library(car)
+library(broom)
+library(pROC)
 ```
 
 ```{r load in the data, message=FALSE, warning=FALSE, include=FALSE}
@@ -138,7 +141,7 @@ rdat %>%
   mutate(meanvic = summi/n, groupsize = cut(n, breaks = c(0,10,20,30,40,50,60), labels = c("0-10","11-20","21-30","31-40","41-50","51-60"))) %>% 
   arrange(desc(meanvic)) %>% 
   filter(summi!=0) %>% 
-  ggplot(aes(y=meanvic, x=(summi+rnorm(26,0,0.1)), label=class, shape = groupsize, color = gradyear))+geom_point(size=3)+scale_x_continuous(breaks=seq(1,20,1))+xlab("Sum of aerial victories")+ylab("aerial victory number to\nclass size ratio")+theme_minimal()+geom_smooth(method=lm, aes(x=summi, y = meanvic, group = groupsize, linetype = groupsize), inherit.aes=F, se = F)+geom_smooth(method=lm, aes(x=summi, y = meanvic, group = gradyear, color = gradyear), inherit.aes=F, se = F)+scale_y_continuous(breaks=seq(0,1.5,0.1))
+  ggplot(aes(y=meanvic, x=(summi+rnorm(26,0,0.1)), label=class, shape = groupsize, color = gradyear))+geom_point(size=3)+scale_x_continuous(breaks=seq(1,20,1))+xlab("Sum of aerial victories")+ylab("aerial victory number to\nclass size ratio")+theme_minimal()+geom_smooth(method=lm, aes(x=summi, y = meanvic, group = groupsize, linetype = groupsize), inherit.aes=F, se = F)+geom_smooth(method=lm, aes(x=summi, y = meanvic, group = gradyear, color = gradyear), inherit.aes=F, se = F)+scale_y_continuous(breaks=seq(0,1.5,0.1))+labs(caption="Szerintem ezt ne tegyük be, mert nem annyira logikus, hogy van-e értelme.")+theme(plot.caption=element_text(hjust=0))
 #+geom_text(alpha=0.4,position="identity", inherit.aes = T, size = 3) > ezt kivettem, mert szerintem nem is kell label erre
 #+Viszont szerintem majd ezt tartsuk meg azért, mert azt jól mutatja, hogy pl. az évek során nem lettek sikeresebbek, de valamennyire nagyobbak igen az osztályok
 #+Ami még látszik, hogy 
@@ -159,18 +162,72 @@ wizzdat <- rdat %>%
   filter(summi!=0)
 
 wizzdat %>% 
-  ggplot(aes(y=summi, x=(n+rnorm(26,0,0.05)), label=class, shape = groupsize, color = gradyear))+geom_point(size=3)+scale_x_continuous(breaks=seq(0,50,1))+scale_y_continuous(breaks=seq(0,50,1))+geom_smooth(method=lm, inherit.aes = F, aes(x=n, y =summi),se=F,color="black",linetype=2)+geom_smooth(method=lm, inherit.aes = F, aes(x=n, y =summi,color=gradyear),se=F)
+  ggplot(aes(y=summi, x=(n+rnorm(26,0,0.05)), label=class, shape = groupsize, color = gradyear))+geom_point(size=3)+scale_x_continuous(breaks=seq(0,50,1))+scale_y_continuous(breaks=seq(0,50,1))+geom_smooth(method=lm, inherit.aes = F, aes(x=n, y =summi),se=F,color="black",linetype=2)+geom_smooth(method=lm, inherit.aes = F, aes(x=n, y =summi,color=gradyear),se=F)+xlab("Group size")+ylab("Total number of aerial victories")+ggtitle("Group size ~ Victory sum")+labs(caption="Erős kapcsolat van a végzési év és a csoportméret között\nIgazán kapcsolat a győzelemmel a nagyon kicsi és a nagyobb csoportok esetén van.\nViszont általában véve van egy kapcsolat, csak hogy miért, az a kérdés.")+theme(plot.caption = element_text(hjust = 0))
+
+rdat$classum <- NA
+rdat$classize <- NA
+rdat$notzero <- NA
+for(tempclass in unique(rdat$class)[!is.na(unique(rdat$class))]){
+  rdat[rdat$class==tempclass&!is.na(rdat$class),"classum"] <- sum(rdat[rdat$class==tempclass,"number_of_aerial_victory_credits"],na.rm=T)
+  rdat[rdat$class==tempclass&!is.na(rdat$class),"classize"] <- nrow(rdat[rdat$class==tempclass&!is.na(rdat$class),])
+  rdat[rdat$class==tempclass&!is.na(rdat$class),"notzero"] <- nrow(rdat[rdat$class==tempclass&!is.na(rdat$class)&rdat$number_of_aerial_victory_credits!=0,])
+}
 
 rdat %>% 
-  mutate(gradyear = as.factor(format(graduation_date, format = "%Y")), winnum=(number_of_aerial_victory_credits+rnorm(length(number_of_aerial_victory_credits),0,0.05))) %>% 
+  mutate(gradyear = as.factor(format(graduation_date, format = "%Y")),class = as.factor(class), winnum=(number_of_aerial_victory_credits+rnorm(length(number_of_aerial_victory_credits),0,0.05))) %>%
+  mutate(class = reorder(class, classum,max, order = is.ordered(rdat$classum)),
+         sumfact = cut(classum, breaks = c(0,1,3,5,7,9,11,15), labels = c("1","2-3","4-5","6-7","8-9","10-11","12-15"))) %>% 
   group_by(class, gradyear) %>% 
-  ggplot(aes(x=class,y=winnum))+geom_point()+theme(axis.text.x = element_text(angle=90)) #szerintem itt úgy kellene módosítani, hogy a labeleket a csoportszám alapján kellene sorba rendezni.
+  filter(classum!=0) %>%
+  ggplot(aes(x=class,y=winnum,color=sumfact))+geom_point(size=1,position = position_jitter(width=0.1))+theme(axis.text.x = element_text(angle=90))
+
+
+rdat %>% 
+  mutate(gradyear = as.factor(format(graduation_date, format = "%Y")),class = as.factor(class), winnum=(number_of_aerial_victory_credits+rnorm(length(number_of_aerial_victory_credits),0,0.05))) %>%
+  mutate(class = reorder(class, classize,max, order = is.ordered(rdat$classum)),
+         sumfact = cut(classum, breaks = c(0,1,3,5,7,9,11,15), labels = c("1","2-3","4-5","6-7","8-9","10-11","12-15")),
+         groupsize = cut(classize, breaks = c(0,10,20,30,40,50,60), labels = c("0-10","11-20","21-30","31-40","41-50","51-60"))) %>% 
+  group_by(class, gradyear) %>% 
+  filter(classum!=0) %>%
+  ggplot(aes(x=class,y=winnum,color=groupsize))+geom_point(size=1,position = position_jitter(width=0.1))+
+  xlab("Class")+ylab("Personal number of victories")+ggtitle("Personal number of victories in groups ordered by group size")+labs(caption="Itt látszik, hogy mintha a csoportméret növekedésével kevesebb lenne az igazán sikeres pilóta.\nLehet, hogy ott már kevésbé figyeltek oda rájuk?")+theme(plot.caption=element_text(hjust=0))+theme_minimal()+theme(axis.text.x = element_text(angle=90))
+
+rdat %>% #Class size ~ number of participants with victory; color = victory number groups
+  mutate(gradyear = as.factor(format(graduation_date, format = "%Y")),class = as.factor(class), winnum=(number_of_aerial_victory_credits+rnorm(length(number_of_aerial_victory_credits),0,0.05))) %>%
+  mutate(class = reorder(class, classize,max, order = is.ordered(rdat$classum)),
+         sumfact = cut(classum, breaks = c(0,1,3,5,7,9,11,15), labels = c("1","2-3","4-5","6-7","8-9","10-11","12-15")),
+         groupsize = cut(classize, breaks = c(0,10,20,30,40,50,60), labels = c("0-10","11-20","21-30","31-40","41-50","51-60")),
+         groupwin = cut(classum, breaks = c(0,2,4,7,15), labels = c("0-2","3-4","5-7","8-15"))) %>% 
+  group_by(class, gradyear,groupsize,groupwin,classize) %>%
+  summarize(max=max(classum),notzero=sum(number_of_aerial_victory_credits>0)) %>% 
+  arrange(desc(max)) %>%
+  filter(max>0) %>% 
+  ggplot(aes(x=classize,y=notzero,color=groupwin))+geom_point()+scale_x_continuous(breaks=seq(1,40,1))+geom_smooth(method=lm,inherit.aes=F,aes(x=classize,y=notzero),se=F)+
+  theme_classic()+ggtitle("Number of participants with victory along the size of the class")+xlab("Class size")+ylab("Number of participants with victory")+
+  scale_y_continuous(breaks=c(1:8))+labs(color = "Number of victories per class")+labs(caption = "Number of participants with at least on victory seems to increase\nwith the size of the class.")+
+  theme(plot.caption = element_text(hjust=0, size = 16))
+
+grady<-rdat %>% 
+  mutate(gradyear = as.factor(format(graduation_date, format = "%Y")),class = as.factor(class), winnum=(number_of_aerial_victory_credits+rnorm(length(number_of_aerial_victory_credits),0,0.05))) %>%
+  mutate(class = reorder(class, classize,max, order = is.ordered(rdat$classum)),
+         sumfact = cut(classum, breaks = c(0,1,3,5,7,9,11,15), labels = c("1","2-3","4-5","6-7","8-9","10-11","12-15")),
+         groupsize = cut(classize, breaks = c(0,10,20,30,40,50,60), labels = c("0-10","11-20","21-30","31-40","41-50","51-60")),
+         groupwin = cut(classum, breaks = c(0,2,4,7,15), labels = c("0-2","3-4","5-7","8-15"))) %>% 
+  group_by(class, gradyear,groupsize,groupwin,classize) %>%
+  summarize(max=max(classum),notzero=sum(number_of_aerial_victory_credits>0)) %>% 
+  mutate(ratio = (max/notzero)*(notzero/classize)) %>% 
+  arrange(desc(ratio)) %>%
+  filter(max>0)
+
+grady %>% #ezzel lehet megmutatni azt, hogy a gradyear az, ami alapvetően számít a teljes classra nézve és nem a class létszáma
+  ggplot(aes(x=classize,y=ratio,color=gradyear))+geom_point()+geom_hline(yintercept = 0.3)+theme_classic()+ggtitle("Victory ratio along class size")+xlab("Class size (Number of pilots)")+ylab("Victory ratio")+labs(caption="Victory ratio was calculated the following way: (Sum of group victory / Number of pilots with victory)\n multiplied by (Number of pilots with victory / Class size)",color="Graduation year")+theme(plot.caption = element_text(hjust=0))
+#szerintem itt úgy kellene módosítani, hogy a labeleket a victory number vagy a csoportnagyság alapján sorba rendezni?
 
 #Konklúzió: nincs strength in numbers, mert ahogy nő átlagosan a csoportméret, úgy csökken az arány. Van egy gyengébb kapcsolat az évekkel, viszont ez valószínűleg inkább ahhoz kapcsolódik, hogy kisebbek voltak a csoportok átlagosan. Ezt egy summaryvel is jó lenne megmutatni.
 #+Amit szerintem még érdemes lenne megnézni:
-#+Csoportméret~győzelemszámsum
-#+évszám~győzelemszámsum
-#+facet_wrap: classokra lebontva, egyéni num of victories
+#+Csoportméret~győzelemszámsum [X]
+#+évszám~győzelemszámsum []
+#+facet_wrap: classokra lebontva, egyéni num of victories []
 #
 #Amiket pedig summaryvel lenne fontos megmutatni:
 #+minden változónál a mintázatokat
@@ -216,14 +273,31 @@ rdat %>%
 ## Data modification
 
 ```{r Correct variables}
+rdat2<-rdat %>% #recode factors as factors
+  mutate(rank_at_graduation = as.factor(rank_at_graduation),
+         class = as.factor(class),
+         graduated_from = as.factor(graduated_from),
+         pilot_type = as.factor(pilot_type),
+         military_hometown_of_record = as.factor(military_hometown_of_record),
+         state = as.factor(state))
 rdat2 <- rdat2 %>% 
   mutate(rank_at_graduation = recode(rank_at_graduation, "Captain" = "Capt", "Unk" = "N/A"), pilot_type = recode(pilot_type, "Liason pilot" = "Liaison pilot"))
+#create binary has victory
 rdat2 <- rdat2 %>% 
   mutate(hasvictory = number_of_aerial_victory_credits!=0, gradyear = as.numeric(format(graduation_date, format = "%Y"))) 
-rdat2<-rdat2 %>% 
-  filter(gradyear<=1944) #mindenkit kidobni, aki később végzett, mert túl későn érkeztek a háborúba
+rdat2[rdat2$hasvictory==T,"hasvictory"] <- 1
+rdat2[rdat2$hasvictory==F,"hasvictory"] <- 0
+#rdat2<-rdat2 %>% 
+#  filter(gradyear<=1944) #mindenkit kidobni, aki később végzett, mert túl későn érkeztek a háborúba
+#correct victories manually
 rdat2[495,"aerial_victory_credits"] <- "Downed 1 Me-109 on June 9, 1944; Downed 1 He-111 on October 12, 1944; Downed 1 Me-109 on October 12, 1944"
 rdat2[240,"aerial_victory_credits"] <- "Downed 1 Fw-190 on July 2, 1943; Downed 1 Fw-190 on January 28, 1944; Downed 1 Me-109 on January 28, 1944"
+#Throw those without any info about graduation year
+rdat2<-rdat2[!is.na(rdat2$class)|!is.na(rdat2$graduation_date),]
+#Drop without rank
+rdat2 <- rdat2[!is.na(rdat2$rank_at_graduation),]
+#Correct missing gradyear
+rdat2[is.na(rdat2$gradyear),"gradyear"] <- 1945
 ```
 
 
@@ -287,8 +361,117 @@ rdat2 %>%
   group_by(gradyear,rank_at_graduation,state) %>% 
   summarize(n=n()) %>% 
   arrange(desc(n))
+
+rlong %>% #Number of victories per motnh
+  mutate(shotyear = format(date,format="%Y-%m")) %>% 
+  group_by(shotyear) %>% 
+  summarize(number=n()) %>% 
+  mutate(shotyear = as.factor(shotyear)) %>% 
+  filter(!is.na(shotyear)) %>% 
+  ggplot(aes(x=shotyear,y=number))+geom_point()+theme_minimal()+theme(axis.text.x = element_text(angle=-45))+xlab("Date of victory")+ylab("Number of victories")+ggtitle("Number of victories per months")+
+  scale_y_continuous(breaks=seq(0,35,2))
 ```
 
+## Model building
+
+### Logistic regression
+
+```{r}
+logmod <-  glm(hasvictory ~ rank_at_graduation + gradyear, data = rdat2, family = binomial(link = "logit")) #itt szerintem azért kérdés, hogy mennyire van értelme az 1945-ös csoportot benntartani, szerintem semmi. Nem is nagyon lehet megérveli. A pilot_type pedig nyilván nem kell, mert ott csak a single engine releváns.
+binommod <- MASS::glm.nb(number_of_aerial_victory_credits~rank_at_graduation+gradyear, data = rdat2)
+str(rdat2)
+results <- list(summary(logmod),summary(binommod))
+```
+
+#### Assumption checks
+
+##### Logistic regression
+
+Assumption tests for the logistic regression model, including linear connection between outcome and continuous predictor variables, multicollinearity and influential cases. Testing for linear association between the continuous predictor of graduation year and the outcome variable.
+
+```{r linear connection}
+rdat2test <- rdat2
+rdat2test$gradyear_log <- rdat2test$gradyear * log(rdat2test$gradyear)
+tester<-glm(hasvictory ~ gradyear + gradyear_log,data=rdat2test,family=binomial)
+summary(tester) #linear connection is violated, transforming gradyear to categorical variable.
+```
+
+The linear connection between the logit and graduation year is violated, thus graduation year needs to be converted to a categorical variable to circumvent the issue.
+
+```{r recode gradyear to categorical}
+rdat2$gradyear <- factor(rdat2$gradyear, levels = c(1942:1948),ordered=T)
+logmod <-  glm(hasvictory ~ rank_at_graduation + gradyear, data = rdat2, family = binomial(link = "logit")) #rebuild the model after recoding gradyear
+```
+
+Testing for multicollinearity.
+
+```{r multicollinearity}
+
+vif(logmod)
+```
+
+VIF suggests the absence of multicollinearity
+
+```{r influential cases}
+logmod_stat <- augment(logmod)
+plot(logmod,which=4,id.n=3)
+```
+
+Cook's distance strict threshold of 4/N (`r 4/nrow(rdat2)`) is violated here, but since the most influential cases are under 1, it is not likely that they have a strong influence on our model.
+
+###### Summary
+
+With the absence of multicollinearity and influential cases, and with our outcome variable being binary, it seems that the use of a logistic regression is supported.
+
+##### Negative binomial regression
+
+Assumption tests for the logistic regression model. Compared to the logistic regression we are going to additionally test for the overdispersion to make sure that a Poisson count model would not be more sufficient for our data.
+
+```{r}
+mean(rdat2$number_of_aerial_victory_credits, na.rm=T)
+var(rdat2$number_of_aerial_victory_credits, na.rm=T)
+poisson <- glm(number_of_aerial_victory_credits~gradyear+rank_at_graduation, data = rdat2, family=poisson)
+nb <- MASS::glm.nb(number_of_aerial_victory_credits~gradyear+rank_at_graduation, data = rdat2)
+lmtest::lrtest(poisson,nb)
+```
+
+Likelihood Ratio Test suggest overdispersion, negative binomial model is superior to a Poisson count model.
+
 # Report
+
+## Model results
+
+### Binary logistic
+
+```{r}
+summary(logmod)
+Anova(logmod, type = "II", test = "LR")
+```
+
+Overall in the model the individual years as predictors don't have a significant effect, graduation year itself seems to be a significant predictor based on the Analysis of Deviance. #ide majd kellene valami hivatkozás, hogy miért ezt futtatom.
+
+```{r}
+summary(nb)
+Anova(nb, type = "II", test = "LR")
+```
+
+
+## Model comparison
+
+To compare our two models on how well they predict a pilot's victory.
+
+```{r}
+logmod_pred <- predict(logmod, type = "response")
+mu_nb <- fitted(nb)
+theta_nb <- nb$theta
+probzero_nb <- dnbinom(0, mu=mu_nb, size=theta_nb)
+probnotzero_nb <- 1 - probzero_nb
+roc_log <- roc(rdat2$hasvictory, logmod_pred)
+roc_nb <- roc(rdat2$hasvictory, probnotzero_nb)
+cat("logistic model AUC:",auc(roc_log),"\n",sep=" ")
+cat("negative binom model AUC:",auc(roc_nb),"\n",sep=" ")
+```
+
+Both models yielded an identical AUC of 0.76, which suggests that the choice of distribution (binary vs identical) did not alter the rank-order of the pilots.
 
 # Discussion
